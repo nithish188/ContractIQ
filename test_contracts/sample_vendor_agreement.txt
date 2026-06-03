@@ -1,0 +1,37 @@
+SOFTWARE SERVICE VENDOR AGREEMENT
+
+This Software Service Vendor Agreement (the "Agreement") is entered into as of June 1, 2026 (the "Effective Date"), by and between:
+Vendor Corp, a Delaware corporation with offices at 100 Innovation Way, Wilmington, DE ("Vendor"), and
+Client Solutions LLC, a California limited liability company with offices at 500 Enterprise Rd, San Francisco, CA ("Client").
+
+1. SCOPE OF SERVICES
+Vendor shall provide cloud software hosting and custom consulting services as described in Statement of Work #1 attached hereto. The initial term of engagement shall be for a duration of 12 Months from the Effective Date.
+
+2. PAYMENT AND BILLING
+Client shall pay all fees specified in Statement of Work #1. Vendor will bill Client monthly. Client shall pay all fees within 15 days of receiving an invoice. Late payments shall accrue interest at a rate of 1.5% per month or the maximum rate permitted by law. Total estimated value for the initial term is $50,000.
+
+3. CONFIDENTIALITY
+Each party agrees to protect the other party's Confidential Information with at least the same degree of care it uses for its own secrets, but in no case less than reasonable care. Confidential Information includes all proprietary specifications, designs, source code, and customer data disclosed by either party during the term of this Agreement.
+
+4. INTELLECTUAL PROPERTY
+Vendor retains all rights, title, and interest in and to the cloud software. Client is granted a limited, non-exclusive, non-transferable license to access the software during the active term of this Agreement.
+
+5. LIMITATION OF LIABILITY
+Except for indemnification obligations, in no event shall either party's aggregate liability under this agreement exceed the total amount paid by Client in the 6 months prior to the event giving rise to liability. Under no circumstances shall either party be liable for any indirect, special, punitive, or consequential damages.
+
+6. TERMINATION
+Either party may terminate this Agreement if the other party breaches any material term and fails to cure such breach within thirty (30) days of receiving written notice.
+Additionally, Vendor may terminate this Agreement at any time without cause upon giving thirty (30) days prior written notice to Client (Termination for Convenience).
+
+7. GOVERNING LAW
+This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of law principles. Any dispute arising out of this Agreement shall be resolved in the state or federal courts located in Wilmington, Delaware.
+
+IN WITNESS WHEREOF, the parties hereto have executed this Agreement as of the Effective Date.
+
+Vendor Corp:
+By: Robert Johnson, VP of Operations
+Signature: ______________________
+
+Client Solutions LLC:
+By: Sarah Miller, Chief Operating Officer
+Signature: ______________________
