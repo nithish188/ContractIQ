@@ -5,33 +5,61 @@ from app.utils.config import settings
 
 logger = logging.getLogger("contractiq")
 
-# Determine if we should use the real Gemini API or the simulator
-api_key = settings.GEMINI_API_KEY
-use_simulator = not api_key
+# ── Provider Detection ────────────────────────────────────────────────────────
+groq_api_key   = settings.GROQ_API_KEY
+gemini_api_key = settings.GEMINI_API_KEY
 
-_client = None
+_provider     = None   # "groq" | "gemini" | None
+_groq_client  = None
+_gemini_client = None
 
-if not use_simulator:
+if groq_api_key:
+    try:
+        from groq import Groq
+        _groq_client = Groq(api_key=groq_api_key)
+        _provider = "groq"
+        logger.info("Groq API client initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize Groq client: {e}. Trying Gemini...")
+
+if _provider is None and gemini_api_key:
     try:
         from google import genai
-        _client = genai.Client(api_key=api_key)
+        _gemini_client = genai.Client(api_key=gemini_api_key)
+        _provider = "gemini"
         logger.info("Gemini API client initialized successfully.")
     except Exception as e:
         logger.error(f"Failed to initialize Gemini client: {e}. Falling back to Simulator.")
-        use_simulator = True
 
+if _provider is None:
+    logger.info("No AI API key found. Running in high-fidelity Simulator Mode.")
+
+
+# ── Core Generate Function ────────────────────────────────────────────────────
 
 def _generate(prompt: str) -> str:
-    """Send a prompt to Gemini and return the raw text response."""
-    response = _client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-        }
-    )
-    return response.text
+    """Send a prompt to the configured AI provider and return raw text."""
+    if _provider == "groq":
+        response = _groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        return response.choices[0].message.content
 
+    elif _provider == "gemini":
+        response = _gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config={"response_mime_type": "application/json"},
+        )
+        return response.text
+
+    raise RuntimeError("No AI provider available.")
+
+
+# ── Public Entry Point ────────────────────────────────────────────────────────
 
 def analyze_contract_with_gemini(
     text: str,
@@ -39,28 +67,27 @@ def analyze_contract_with_gemini(
     """
     Entry point for full contract AI analysis.
     Returns (clauses, entities, summary).
-    Falls back to high-fidelity simulator if the API key is absent or a call fails.
+    Falls back to high-fidelity simulator if no API key is set or a call fails.
     """
-    if use_simulator:
-        logger.info("Running in high-fidelity Simulator Mode (no GEMINI_API_KEY set).")
+    if _provider is None:
+        logger.info("Running in high-fidelity Simulator Mode.")
         return _simulate_analysis(text)
 
     try:
-        clauses = _segment_and_analyze_clauses(text)
+        clauses  = _segment_and_analyze_clauses(text)
         entities = _extract_entities(text)
-        summary = _generate_summary(text, clauses)
+        summary  = _generate_summary(text, clauses)
         return clauses, entities, summary
     except Exception as e:
-        logger.error(f"Gemini API pipeline failed: {e}. Falling back to Simulator.")
+        logger.error(f"AI pipeline failed: {e}. Falling back to Simulator.")
         return _simulate_analysis(text)
 
 
-# ─── Real Gemini Calls ────────────────────────────────────────────────────────
+# ── AI Prompt Functions ───────────────────────────────────────────────────────
 
 def _segment_and_analyze_clauses(text: str) -> List[Dict[str, Any]]:
-    truncated = text[:60_000]
-    prompt = f"""
-You are an expert legal AI risk analyzer.
+    truncated = text[:12_000]   # Groq has context limits; keep safe
+    prompt = f"""You are an expert legal AI risk analyzer.
 
 Segment the following contract into logical clauses/sections, then for each clause return:
 - title: clause heading
@@ -70,52 +97,50 @@ Segment the following contract into logical clauses/sections, then for each clau
 - risk_score: integer 0-100
 - reason: concise explanation of the risk
 
-Return ONLY a JSON array with no markdown fences.
+Return ONLY a valid JSON object with a single key "clauses" containing an array.
 
 Contract:
 ---
 {truncated}
----
-"""
+---"""
     raw = _generate(prompt)
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
+        return data.get("clauses", data) if isinstance(data, dict) else data
     except Exception as e:
         logger.error(f"Clause segmentation parse error: {e}")
         raise
 
 
 def _extract_entities(text: str) -> List[Dict[str, Any]]:
-    truncated = text[:40_000]
-    prompt = f"""
-Extract key metadata entities from the following contract text.
+    truncated = text[:8_000]
+    prompt = f"""Extract key metadata entities from the following contract text.
 Entity types: Date, Deadline, Money, Percentage, Company, Individual, Obligation, Duration.
 
-Return ONLY a JSON array, no markdown fences, matching this schema:
-[{{"entity_type": "...", "entity_value": "..."}}]
+Return ONLY a valid JSON object with a single key "entities" containing an array.
+Each item: {{"entity_type": "...", "entity_value": "..."}}
 
 Contract:
 ---
 {truncated}
----
-"""
+---"""
     raw = _generate(prompt)
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
+        return data.get("entities", data) if isinstance(data, dict) else data
     except Exception as e:
         logger.error(f"Entity extraction parse error: {e}")
         return []
 
 
 def _generate_summary(text: str, clauses: List[Dict[str, Any]]) -> Dict[str, Any]:
-    truncated = text[:30_000]
+    truncated = text[:6_000]
     clause_list = "\n".join(
         f"- {c['title']} (Risk: {c.get('risk_level', 'N/A')})" for c in clauses[:20]
     )
-    prompt = f"""
-Generate a comprehensive Executive Summary for the following contract.
+    prompt = f"""Generate a comprehensive Executive Summary for the following contract.
 
-Return ONLY a JSON object (no markdown fences) with these keys:
+Return ONLY a valid JSON object with these keys:
 - contract_overview (string)
 - purpose (string)
 - key_obligations (list of strings)
@@ -127,8 +152,7 @@ Contract context:
 {truncated}
 
 Extracted clauses:
-{clause_list}
-"""
+{clause_list}"""
     raw = _generate(prompt)
     try:
         return json.loads(raw)
@@ -144,7 +168,7 @@ Extracted clauses:
         }
 
 
-# ─── High-Fidelity Simulator ─────────────────────────────────────────────────
+# ── High-Fidelity Simulator ───────────────────────────────────────────────────
 
 def _simulate_analysis(
     text: str,
@@ -155,12 +179,11 @@ def _simulate_analysis(
     """
     tl = text.lower()
 
-    has_liability      = any(w in tl for w in ["liability", "indemnit", "hold harmless", "damage"])
-    has_termination    = any(w in tl for w in ["terminat", "cancel", "expir"])
-    has_payment        = any(w in tl for w in ["payment", "invoice", "fee", "price", "billing", "usd", "$"])
-    has_confidentiality= any(w in tl for w in ["confidential", "nda", "proprietary", "disclosure"])
+    has_liability       = any(w in tl for w in ["liability", "indemnit", "hold harmless", "damage"])
+    has_termination     = any(w in tl for w in ["terminat", "cancel", "expir"])
+    has_payment         = any(w in tl for w in ["payment", "invoice", "fee", "price", "billing", "usd", "$"])
+    has_confidentiality = any(w in tl for w in ["confidential", "nda", "proprietary", "disclosure"])
 
-    # ── Entity extraction ─────────────────────────────────────────────────────
     companies = []
     for word in text.split():
         stripped = word.strip(".,()\"'")
@@ -172,15 +195,14 @@ def _simulate_analysis(
         companies = ["Vendor Corp", "Client Solutions LLC"]
 
     entities: List[Dict[str, Any]] = [
-        {"entity_type": "Company",   "entity_value": companies[0]},
-        {"entity_type": "Date",      "entity_value": "June 1, 2026"},
-        {"entity_type": "Deadline",  "entity_value": "30 days after billing"},
-        {"entity_type": "Duration",  "entity_value": "12-Month Initial Term"},
+        {"entity_type": "Company",  "entity_value": companies[0]},
+        {"entity_type": "Date",     "entity_value": "June 1, 2026"},
+        {"entity_type": "Deadline", "entity_value": "30 days after billing"},
+        {"entity_type": "Duration", "entity_value": "12-Month Initial Term"},
     ]
     if len(companies) > 1:
         entities.insert(1, {"entity_type": "Company", "entity_value": companies[1]})
 
-    # ── Clause generation ─────────────────────────────────────────────────────
     clauses: List[Dict[str, Any]] = []
 
     if has_payment:
@@ -248,7 +270,6 @@ def _simulate_analysis(
             "reason": "Standard mutual NDA language. Well-balanced and industry-accepted.",
         })
 
-    # Always include jurisdiction
     clauses.append({
         "title": "Governing Law & Jurisdiction",
         "content": (
@@ -262,7 +283,6 @@ def _simulate_analysis(
     })
     entities.append({"entity_type": "Obligation", "entity_value": "Disputes resolved under Delaware courts"})
 
-    # Fallback if no clauses matched
     if len(clauses) == 1:
         clauses.insert(0, {
             "title": "General Terms",
@@ -273,8 +293,7 @@ def _simulate_analysis(
             "reason": "Insufficient structured content detected. Manual review recommended.",
         })
 
-    # ── Executive Summary ─────────────────────────────────────────────────────
-    party_str = " and ".join(companies[:2])
+    party_str    = " and ".join(companies[:2])
     high_clauses = [c["title"] for c in clauses if c["risk_level"] == "HIGH"]
 
     summary: Dict[str, Any] = {
