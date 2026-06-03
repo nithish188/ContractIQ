@@ -26,10 +26,11 @@ app = FastAPI(
 
 # CORS Configuration
 origins = [
-    "http://localhost:5173", # Vite local server default port
+    "http://localhost:5173",       # Vite local dev
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "*"
+    "https://*.vercel.app",        # Vercel frontend (all preview/prod URLs)
+    "https://*.hf.space",          # HuggingFace Spaces
 ]
 
 app.add_middleware(
